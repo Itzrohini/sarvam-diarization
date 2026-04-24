@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Thunai — Multi Speaker STT</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f5f0;
+      color: #1a1a1a;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: #ffffff;
+      border-bottom: 1px solid #e5e5e0;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo {
+      width: 36px; height: 36px;
+      background: #5b4fcf;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-size: 18px; font-weight: 700;
+    }
+    .header h1 { font-size: 20px; font-weight: 600; }
+    .header span {
+      font-size: 13px; color: #888;
+      background: #f0f0ea;
+      padding: 3px 10px; border-radius: 12px; margin-left: 4px;
+    }
+
+    /* ── Main layout ── */
+    .main {
+      max-width: 860px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+
+    /* ── Upload card ── */
+    .upload-card {
+      background: #ffffff;
+      border: 1px solid #e5e5e0;
+      border-radius: 16px;
+      padding: 32px;
+      margin-bottom: 24px;
+    }
+    .upload-card h2 {
+      font-size: 17px; font-weight: 600; margin-bottom: 20px;
+    }
+
+    /* Drop zone */
+    .drop-zone {
+      border: 2px dashed #c5c5c0;
+      border-radius: 12px;
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #fafaf8;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #5b4fcf;
+      background: #f0eeff;
+    }
+    .drop-icon {
+      font-size: 40px; margin-bottom: 12px;
+    }
+    .drop-zone p {
+      font-size: 15px; color: #555; margin-bottom: 6px;
+    }
+    .drop-zone small { font-size: 12px; color: #999; }
+    .drop-zone input { display: none; }
+
+    /* Settings row */
+    .settings-row {
+      display: flex; gap: 16px; margin-top: 20px; flex-wrap: wrap;
+    }
+    .field { flex: 1; min-width: 180px; }
+    .field label {
+      font-size: 12px; font-weight: 500;
+      color: #666; display: block; margin-bottom: 6px;
+    }
+    .field select, .field input {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid #e0e0da;
+      border-radius: 8px;
+      font-size: 14px;
+      background: #fff;
+      color: #1a1a1a;
+      outline: none;
+      transition: border 0.2s;
+    }
+    .field select:focus, .field input:focus {
+      border-color: #5b4fcf;
+    }
+
+    /* Submit button */
+    .btn-transcribe {
+      width: 100%; margin-top: 20px;
+      padding: 13px;
+      background: #5b4fcf;
+      color: white;
+      border: none; border-radius: 10px;
+      font-size: 15px; font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .btn-transcribe:hover { background: #4a3fbf; }
+    .btn-transcribe:active { transform: scale(0.99); }
+    .btn-transcribe:disabled {
+      background: #b0a8e8; cursor: not-allowed;
+    }
+
+    /* ── Status bar ── */
+    .status-bar {
+      display: none;
+      background: #ffffff;
+      border: 1px solid #e5e5e0;
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      align-items: center;
+      gap: 12px;
+    }
+    .status-bar.show { display: flex; }
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid #e0e0da;
+      border-top-color: #5b4fcf;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .status-text { font-size: 14px; color: #555; }
+    .status-step {
+      font-size: 12px; color: #999; margin-top: 2px;
+    }
+
+    /* ── Results card ── */
+    .results-card {
+      display: none;
+      background: #ffffff;
+      border: 1px solid #e5e5e0;
+      border-radius: 16px;
+      padding: 28px;
+    }
+    .results-card.show { display: block; }
+
+    /* Stats row */
+    .stats-row {
+      display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;
+    }
+    .stat {
+      background: #f5f5f0;
+      border-radius: 10px;
+      padding: 12px 16px;
+      flex: 1; min-width: 100px;
+    }
+    .stat-label { font-size: 11px; color: #999; margin-bottom: 4px; }
+    .stat-value { font-size: 22px; font-weight: 600; color: #1a1a1a; }
+    .stat-unit { font-size: 12px; color: #888; margin-left: 2px; }
+
+    /* Segments */
+    .segments-title {
+      font-size: 15px; font-weight: 600; margin-bottom: 16px;
+      padding-bottom: 10px; border-bottom: 1px solid #f0f0ea;
+    }
+    .segment {
+      display: flex; gap: 14px;
+      padding: 14px 0;
+      border-bottom: 1px solid #f5f5f0;
+    }
+    .segment:last-child { border-bottom: none; }
+
+    /* Speaker avatar */
+    .avatar {
+      width: 38px; height: 38px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 600; flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .avatar-0 { background: #ede9ff; color: #5b4fcf; }
+    .avatar-1 { background: #e0f5ee; color: #0f6e56; }
+    .avatar-2 { background: #fde8e0; color: #993c1d; }
+    .avatar-3 { background: #fef3d0; color: #854f0b; }
+
+    .segment-content { flex: 1; }
+    .segment-header {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 5px;
+    }
+    .speaker-name {
+      font-size: 13px; font-weight: 600; color: #1a1a1a;
+    }
+    .time-badge {
+      font-size: 11px; color: #999;
+      background: #f0f0ea; padding: 2px 8px; border-radius: 8px;
+    }
+    .lang-badge {
+      font-size: 11px; color: #5b4fcf;
+      background: #ede9ff; padding: 2px 8px; border-radius: 8px;
+    }
+    .segment-text {
+      font-size: 14px; color: #333; line-height: 1.6;
+    }
+    .segment-text.empty { color: #aaa; font-style: italic; }
+
+    /* Full transcript */
+    .transcript-section {
+      margin-top: 24px; padding-top: 20px;
+      border-top: 1px solid #f0f0ea;
+    }
+    .transcript-section h3 {
+      font-size: 14px; font-weight: 600; margin-bottom: 10px; color: #555;
+    }
+    .transcript-box {
+      background: #f8f8f5;
+      border: 1px solid #e8e8e0;
+      border-radius: 10px;
+      padding: 16px;
+      font-size: 13px;
+      line-height: 1.8;
+      color: #333;
+      white-space: pre-wrap;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    /* Copy button */
+    .btn-copy {
+      margin-top: 12px;
+      padding: 8px 18px;
+      background: transparent;
+      border: 1px solid #e0e0da;
+      border-radius: 8px;
+      font-size: 13px;
+      cursor: pointer;
+      color: #555;
+      transition: all 0.2s;
+    }
+    .btn-copy:hover { background: #f5f5f0; border-color: #5b4fcf; color: #5b4fcf; }
+
+    /* Error box */
+    .error-box {
+      display: none;
+      background: #fff0f0;
+      border: 1px solid #fca5a5;
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      color: #b91c1c;
+    }
+    .error-box.show { display: block; }
+
+    /* File preview */
+    .file-preview {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      margin-top: 14px;
+      padding: 10px 14px;
+      background: #f0eeff;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #5b4fcf;
+    }
+    .file-preview.show { display: flex; }
+    .file-preview span { flex: 1; }
+    .file-remove {
+      cursor: pointer; color: #999; font-size: 16px; line-height: 1;
+    }
+    .file-remove:hover { color: #e00; }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="logo">T</div>
+  <h1>Thunai</h1>
+  <span>Multi-Speaker STT Platform</span>
+</div>
+
+<!-- Main -->
+<div class="main">
+
+  <!-- Upload Card -->
+  <div class="upload-card">
+    <h2>Upload Audio for Transcription</h2>
+
+    <!-- Drop zone -->
+    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <div class="drop-icon">🎙️</div>
+      <p>Click to upload or drag and drop audio</p>
+      <small>Supports WAV, MP3, M4A, OGG, FLAC · Max 25MB</small>
+      <input type="file" id="fileInput" accept="audio/*" onchange="handleFileSelect(event)" />
+    </div>
+
+    <!-- File preview -->
+    <div class="file-preview" id="filePreview">
+      <span id="fileName">No file selected</span>
+      <span class="file-remove" onclick="removeFile()">✕</span>
+    </div>
+
+    <!-- Settings -->
+    <div class="settings-row">
+      <div class="field">
+        <label>Language</label>
+        <select id="languageCode">
+          <option value="unknown">Auto Detect (Recommended)</option>
+          <option value="kn-IN">Kannada</option>
+          <option value="hi-IN">Hindi</option>
+          <option value="ta-IN">Tamil</option>
+          <option value="te-IN">Telugu</option>
+          <option value="ml-IN">Malayalam</option>
+          <option value="en-IN">English</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Number of Speakers (optional)</label>
+        <input type="number" id="numSpeakers" placeholder="Leave empty for auto" min="1" max="10" />
+      </div>
+      <div class="field">
+        <label>Speaker Labels (comma separated)</label>
+        <input type="text" id="speakerLabels" placeholder="Shop Owner,Customer" />
+      </div>
+    </div>
+
+    <button class="btn-transcribe" id="btnTranscribe" onclick="transcribe()" disabled>
+      Transcribe Audio
+    </button>
+  </div>
+
+  <!-- Error box -->
+  <div class="error-box" id="errorBox"></div>
+
+  <div class="status-bar" id="statusBar">
+  <div class="spinner"></div>
+  <div style="flex:1;">
+    <div class="status-text" id="statusText">Processing audio...</div>
+    <div class="status-step" id="statusStep">0% complete</div>
+    <div style="margin-top:8px;background:#f0f0ea;border-radius:4px;height:4px;">
+      <div id="progressBar" style="height:4px;background:#5b4fcf;border-radius:4px;width:0%;transition:width 0.5s;"></div>
+    </div>
+  </div>
+</div>
+
+  <!-- Results card -->
+  <div class="results-card" id="resultsCard">
+
+    <!-- Stats -->
+    <div class="stats-row" id="statsRow"></div>
+
+    <!-- Segments -->
+    <div class="segments-title">Speaker Transcripts</div>
+    <div id="segmentsList"></div>
+
+    <!-- Full transcript -->
+    <div class="transcript-section">
+      <h3>Full Transcript</h3>
+      <div class="transcript-box" id="fullTranscript"></div>
+      <button class="btn-copy" onclick="copyTranscript()">Copy Transcript</button>
+    </div>
+
+  </div>
+</div>
+<script>
+const API_URL = 'http://localhost:8000';
+let selectedFile = null;
+
+// Drag and drop
+const dropZone = document.getElementById('dropZone');
+
+dropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropZone.classList.add('dragover');
+});
+
+dropZone.addEventListener('dragleave', () => {
+  dropZone.classList.remove('dragover');
+});
+
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) setFile(file);
+});
+
+// File selection — this was missing
+function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (file) setFile(file);
+}
+
+function setFile(file) {
+  selectedFile = file;
+  const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+  document.getElementById('fileName').textContent = `${file.name} (${sizeMB} MB)`;
+  document.getElementById('filePreview').classList.add('show');
+  document.getElementById('btnTranscribe').disabled = false;
+  hideError();
+  hideResults();
+}
+
+function removeFile() {
+  selectedFile = null;
+  document.getElementById('fileInput').value = '';
+  document.getElementById('filePreview').classList.remove('show');
+  document.getElementById('btnTranscribe').disabled = true;
+  hideResults();
+}
+
+// Main transcribe function — must be async
+async function transcribe() {
+  if (!selectedFile) return;
+
+  hideError();
+  hideResults();
+  showStatus('Uploading audio...', 'Sending to Thunai server');
+
+  const formData = new FormData();
+  formData.append('file', selectedFile);
+  formData.append('language_code', document.getElementById('languageCode').value);
+
+  const numSpeakers = document.getElementById('numSpeakers').value;
+  if (numSpeakers) formData.append('num_speakers', numSpeakers);
+
+  const speakerLabels = document.getElementById('speakerLabels').value;
+  if (speakerLabels) formData.append('speaker_labels', speakerLabels);
+
+  try {
+    // Start the async job
+    const startRes = await fetch(`${API_URL}/process-audio-async`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!startRes.ok) {
+      const errData = await startRes.json();
+      throw new Error(errData.message || 'Failed to start job');
+    }
+
+    const startData = await startRes.json();
+    const jobId = startData.job_id;
+
+    if (!jobId) {
+      throw new Error('No job ID returned from server');
+    }
+
+    // Poll for progress
+    await pollJobProgress(jobId);
+
+  } catch (err) {
+    hideStatus();
+    showError(err.message);
+  }
+}
+
+// Poll job progress every 3 seconds
+async function pollJobProgress(jobId) {
+  return new Promise((resolve, reject) => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_URL}/job/${jobId}`);
+        const data = await res.json();
+
+        // Update status text
+        document.getElementById('statusText').textContent = data.step || 'Processing...';
+        document.getElementById('statusStep').textContent = `${data.progress || 0}% complete`;
+
+        // Update progress bar
+        const bar = document.getElementById('progressBar');
+        if (bar) bar.style.width = (data.progress || 0) + '%';
+
+        if (data.status === 'completed') {
+          clearInterval(interval);
+          hideStatus();
+          showResults(data.result);
+          resolve();
+        } else if (data.status === 'failed') {
+          clearInterval(interval);
+          hideStatus();
+          showError(data.error || 'Transcription failed');
+          reject(new Error(data.error));
+        }
+
+      } catch (err) {
+        clearInterval(interval);
+        hideStatus();
+        showError('Lost connection to server. Please try again.');
+        reject(err);
+      }
+    }, 3000);
+  });
+}
+
+// Render results
+function showResults(data) {
+  if (!data) return;
+
+  const statsRow = document.getElementById('statsRow');
+  statsRow.innerHTML = `
+    <div class="stat">
+      <div class="stat-label">Speakers Detected</div>
+      <div class="stat-value">${data.total_speakers}</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Audio Duration</div>
+      <div class="stat-value">${data.duration_seconds}<span class="stat-unit">sec</span></div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Total Segments</div>
+      <div class="stat-value">${data.segments.length}</div>
+    </div>
+  `;
+
+  const list = document.getElementById('segmentsList');
+  const avatarColors = ['avatar-0', 'avatar-1', 'avatar-2', 'avatar-3'];
+  const speakerColorMap = {};
+  let colorIdx = 0;
+
+  list.innerHTML = data.segments.map(seg => {
+    if (!(seg.speaker in speakerColorMap)) {
+      speakerColorMap[seg.speaker] = avatarColors[colorIdx % avatarColors.length];
+      colorIdx++;
+    }
+    const avatarClass = speakerColorMap[seg.speaker];
+    const initials = seg.speaker_label.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    const hasText = seg.transcript && seg.transcript.trim();
+    const startFmt = seg.start_formatted || seg.start + 's';
+    const endFmt = seg.end_formatted || seg.end + 's';
+
+    return `
+      <div class="segment">
+        <div class="avatar ${avatarClass}">${initials}</div>
+        <div class="segment-content">
+          <div class="segment-header">
+            <span class="speaker-name">${seg.speaker_label}</span>
+            <span class="time-badge">${startFmt} – ${endFmt}</span>
+            ${seg.language_detected ? `<span class="lang-badge">${seg.language_detected}</span>` : ''}
+          </div>
+          <div class="segment-text ${hasText ? '' : 'empty'}">
+            ${hasText ? seg.transcript : '[no speech detected]'}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('fullTranscript').textContent =
+    data.full_transcript || 'No transcript available';
+
+  document.getElementById('resultsCard').classList.add('show');
+}
+
+function copyTranscript() {
+  const text = document.getElementById('fullTranscript').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.btn-copy');
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy Transcript', 2000);
+  });
+}
+
+// Helper functions
+function showStatus(text, step) {
+  document.getElementById('statusText').textContent = text;
+  document.getElementById('statusStep').textContent = step;
+  document.getElementById('statusBar').classList.add('show');
+  document.getElementById('btnTranscribe').disabled = true;
+}
+
+function hideStatus() {
+  document.getElementById('statusBar').classList.remove('show');
+  document.getElementById('btnTranscribe').disabled = false;
+}
+
+function showError(msg) {
+  const box = document.getElementById('errorBox');
+  box.textContent = 'Error: ' + msg;
+  box.classList.add('show');
+}
+
+function hideError() {
+  document.getElementById('errorBox').classList.remove('show');
+}
+
+function hideResults() {
+  document.getElementById('resultsCard').classList.remove('show');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,71 @@
+# docker-compose.yml
+# ============================================================
+# WHY DOCKER COMPOSE?
+# Compose manages multi-container apps with a single command.
+# For this project, we have one service (the STT API), but
+# Compose handles:
+#   - Environment variable injection from .env
+#   - Volume mounting (model cache, logs)
+#   - Port mapping
+#   - Restart policies
+# In the future you might add Redis (for caching transcripts),
+# Postgres (for storing results), or Nginx (reverse proxy) —
+# each as an additional service in this same file.
+# ============================================================
+
+version: "3.9"
+
+services:
+  thunai-stt:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    # Maps container port 8000 to host port 8000.
+    # Format: "host_port:container_port"
+    ports:
+      - "8000:8000"
+
+    # Load environment variables from .env file.
+    # These override any values set in the Dockerfile.
+    env_file:
+      - .env
+
+    volumes:
+      # Cache the downloaded Pyannote model weights on the host.
+      # Without this volume, the container re-downloads ~1GB of model
+      # weights every time it restarts (takes ~5 minutes + bandwidth).
+      # With this volume, the model is cached persistently.
+      - pyannote_cache:/home/thunai/.cache/torch/pyannote
+      - huggingface_cache:/home/thunai/.cache/huggingface
+
+      # Mount logs directory for easy inspection from the host.
+      - ./logs:/app/logs
+
+    # Restart the container if it crashes.
+    # "unless-stopped" means: restart on crash or on Docker daemon restart,
+    # but not if you explicitly run `docker compose stop`.
+    restart: unless-stopped
+
+    # Resource limits prevent a single runaway container from starving
+    # other processes on the host machine.
+    deploy:
+      resources:
+        limits:
+          memory: 4G   # Pyannote model + PyTorch takes ~2-3 GB RAM
+          cpus: "2.0"
+
+    # Health check tells Compose when the service is ready.
+    # Without this, dependent services might start before this is ready.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health').raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s   # Give the model time to load at startup
+
+# Named volumes persist data across container restarts.
+# They're managed by Docker and stored in /var/lib/docker/volumes/.
+volumes:
+  pyannote_cache:
+  huggingface_cache:

@@ -1,0 +1,71 @@
+# ============================================================
+# Thunai STT Platform — requirements.txt
+# All versions are pinned for reproducible production builds.
+# Run: pip install -r requirements.txt
+# ============================================================
+
+# --- Web Framework ---
+# FastAPI: async-first Python web framework. We use it because
+# audio processing is I/O-heavy (network calls to Sarvam API),
+# so async lets one worker handle many requests concurrently.
+fastapi==0.111.0
+
+# Uvicorn: ASGI server that actually runs FastAPI.
+# "standard" extras include watchfiles (hot-reload) & httptools (fast HTTP parser).
+uvicorn[standard]==0.29.0
+
+# --- HTTP Client ---
+# httpx: async-native HTTP client. We need async because we're
+# calling Sarvam AI's API inside async FastAPI route handlers.
+# requests (sync) would block the event loop and kill performance.
+httpx==0.27.0
+
+# --- Audio Processing ---
+# pydub: simple audio slicing, format conversion, and duration checks.
+# Under the hood it shells out to ffmpeg — so ffmpeg must be installed.
+pydub==0.25.1
+
+# soundfile: reads/writes WAV, FLAC, OGG. Pyannote needs WAV input.
+soundfile==0.12.1
+
+# librosa: audio analysis toolkit. Used for sample-rate normalization
+# before sending audio to Pyannote (which wants 16kHz mono WAV).
+librosa==0.10.2
+
+# numpy: array math. librosa, soundfile, and pyannote all need it.
+numpy==1.26.4
+
+# --- Diarization ---
+# pyannote.audio: state-of-the-art speaker diarization.
+# v3.1 uses a neural segmentation model + a clustering stage.
+# Requires a HuggingFace token to download the gated model weights.
+pyannote.audio==3.1.1
+
+# torch: PyTorch — pyannote runs neural models on top of it.
+# CPU-only build shown here; replace with cu121 wheel for GPU.
+torch==2.3.0
+torchaudio==2.3.0
+
+# --- Configuration & Environment ---
+# python-dotenv: reads key=value pairs from .env into os.environ.
+# Essential for keeping API keys out of source code.
+python-dotenv==1.0.1
+
+# pydantic-settings: extends Pydantic to build a typed Settings class
+# that pulls values from env vars. Type-safe config with zero boilerplate.
+pydantic-settings==2.2.1
+
+# --- Data Validation ---
+# pydantic: FastAPI uses it internally. We also use it for our own
+# request/response schemas to get automatic validation + JSON serialization.
+pydantic==2.7.1
+
+# --- File Handling ---
+# python-multipart: enables FastAPI to receive multipart/form-data
+# (i.e. file uploads). Without this, UploadFile will silently fail.
+python-multipart==0.0.9
+
+# --- Testing ---
+pytest==8.2.0
+pytest-asyncio==0.23.6
+httpx  # reused for TestClient

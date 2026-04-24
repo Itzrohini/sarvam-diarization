@@ -1,0 +1,33 @@
+# API Keys — NEVER upload these
+.env
+
+# Python virtual environment — too large to upload (500MB+)
+venv/
+
+# Python cache files — auto-generated, not needed
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Database files
+*.db
+*.sqlite
+
+# Logs
+logs/
+*.log
+
+# AI model cache — too large (1GB+)
+.cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VS Code settings
+.vscode/
+
+# Test outputs
+*.tmp
