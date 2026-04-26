@@ -14,7 +14,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Req
 from database.database import create_tables, get_db
 from database import crud
 from typing import Optional
-
+from services.analytics_service import get_analytics_service, AnalyticsService
 
 
 from core.config import get_settings
@@ -307,6 +307,15 @@ async def delete_transcript(transcript_id: int, db: Session = Depends(get_db)):
     if not deleted:
         raise HTTPException(status_code=404, detail="Transcript not found")
     return {"success": True, "message": f"Transcript {transcript_id} deleted"}
+# ── Frontend routes ──
+@app.get("/", include_in_schema=False)
+async def serve_frontend():
+    return FileResponse("frontend/index.html")
+
+    
+@app.get("/dashboard", include_in_schema=False)
+async def serve_dashboard():
+    return FileResponse("frontend/dashboard.html")
 
 
 if __name__ == "__main__":
@@ -318,7 +327,51 @@ if __name__ == "__main__":
         reload=settings.debug,
         log_level="debug" if settings.debug else "info",
     )
+@app.get("/analytics/summary", tags=["Analytics"])
+async def analytics_summary(
+    db: Session = Depends(get_db),
+):
+    """Overall platform statistics — total transcriptions, audio minutes, averages."""
+    svc = get_analytics_service()
+    return svc.get_summary(db)
 
+
+@app.get("/analytics/languages", tags=["Analytics"])
+async def analytics_languages(
+    db: Session = Depends(get_db),
+):
+    """Language breakdown — which languages appear most in transcripts."""
+    svc = get_analytics_service()
+    return {"languages": svc.get_language_breakdown(db)}
+
+
+@app.get("/analytics/daily", tags=["Analytics"])
+async def analytics_daily(
+    days: int = 30,
+    db: Session = Depends(get_db),
+):
+    """Daily transcription counts for the last N days."""
+    svc = get_analytics_service()
+    return {"daily": svc.get_daily_transcriptions(db, days=days)}
+
+
+@app.get("/analytics/keywords", tags=["Analytics"])
+async def analytics_keywords(
+    top: int = 20,
+    db: Session = Depends(get_db),
+):
+    """Most common words across all transcripts."""
+    svc = get_analytics_service()
+    return {"keywords": svc.get_top_keywords(db, top_n=top)}
+
+
+@app.get("/analytics/speakers", tags=["Analytics"])
+async def analytics_speakers(
+    db: Session = Depends(get_db),
+):
+    """Speaker talk time analysis across all transcripts."""
+    svc = get_analytics_service()
+    return svc.get_speaker_stats(db)
 
 import uuid
 from collections import defaultdict

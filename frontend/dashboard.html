@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Thunai — Analytics Dashboard</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+         background:#f5f5f0;color:#1a1a1a;min-height:100vh;}
+    .header{background:#fff;border-bottom:1px solid #e5e5e0;
+            padding:16px 32px;display:flex;align-items:center;gap:12px;}
+    .logo{width:36px;height:36px;background:#5b4fcf;border-radius:10px;
+          display:flex;align-items:center;justify-content:center;
+          color:#fff;font-size:18px;font-weight:700;}
+    .header h1{font-size:20px;font-weight:600;}
+    .header span{font-size:13px;color:#888;background:#f0f0ea;
+                 padding:3px 10px;border-radius:12px;margin-left:4px;}
+    .nav-link{margin-left:auto;font-size:13px;color:#5b4fcf;
+              text-decoration:none;padding:6px 14px;
+              border:1px solid #5b4fcf;border-radius:8px;}
+    .main{max-width:1100px;margin:32px auto;padding:0 20px;}
+
+    /* Stats row */
+    .stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+               gap:12px;margin-bottom:24px;}
+    .stat-card{background:#fff;border:1px solid #e5e5e0;border-radius:14px;
+               padding:18px 20px;}
+    .stat-icon{font-size:22px;margin-bottom:8px;}
+    .stat-val{font-size:26px;font-weight:600;color:#1a1a1a;}
+    .stat-lbl{font-size:12px;color:#888;margin-top:4px;}
+
+    /* Chart grid */
+    .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
+    .chart-card{background:#fff;border:1px solid #e5e5e0;border-radius:14px;padding:20px;}
+    .chart-card h3{font-size:14px;font-weight:600;margin-bottom:16px;color:#1a1a1a;}
+    .chart-full{background:#fff;border:1px solid #e5e5e0;border-radius:14px;
+                padding:20px;margin-bottom:16px;}
+    .chart-full h3{font-size:14px;font-weight:600;margin-bottom:16px;}
+    @media(max-width:640px){.chart-grid{grid-template-columns:1fr;}}
+
+    /* Bar chart */
+    .bar-chart{display:flex;flex-direction:column;gap:8px;}
+    .bar-row{display:flex;align-items:center;gap:10px;}
+    .bar-label{font-size:12px;color:#555;min-width:100px;text-align:right;}
+    .bar-track{flex:1;background:#f0f0ea;border-radius:4px;height:20px;overflow:hidden;}
+    .bar-fill{height:100%;border-radius:4px;transition:width 0.8s ease;display:flex;
+              align-items:center;padding-left:8px;}
+    .bar-fill span{font-size:11px;color:#fff;font-weight:500;white-space:nowrap;}
+    .bar-count{font-size:12px;color:#888;min-width:30px;}
+
+    /* Donut chart (CSS) */
+    .donut-wrap{display:flex;align-items:center;gap:20px;flex-wrap:wrap;}
+    .donut{position:relative;width:120px;height:120px;flex-shrink:0;}
+    .donut svg{transform:rotate(-90deg);}
+    .donut-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+                  text-align:center;}
+    .donut-num{font-size:20px;font-weight:600;}
+    .donut-sub{font-size:10px;color:#888;}
+    .legend{display:flex;flex-direction:column;gap:6px;}
+    .legend-item{display:flex;align-items:center;gap:8px;font-size:12px;}
+    .legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+
+    /* Daily chart */
+    .daily-chart{display:flex;align-items:flex-end;gap:4px;height:120px;
+                 padding-bottom:20px;position:relative;}
+    .daily-bar{flex:1;background:#5b4fcf;border-radius:3px 3px 0 0;
+               min-height:2px;transition:height 0.5s;position:relative;cursor:pointer;}
+    .daily-bar:hover{background:#4a3fbf;}
+    .daily-bar .tooltip{display:none;position:absolute;bottom:100%;left:50%;
+                        transform:translateX(-50%);background:#1a1a1a;color:#fff;
+                        font-size:11px;padding:4px 8px;border-radius:6px;
+                        white-space:nowrap;margin-bottom:4px;z-index:10;}
+    .daily-bar:hover .tooltip{display:block;}
+    .daily-labels{display:flex;gap:4px;margin-top:4px;}
+    .daily-lbl{flex:1;text-align:center;font-size:9px;color:#aaa;overflow:hidden;}
+
+    /* Keywords */
+    .keyword-cloud{display:flex;flex-wrap:wrap;gap:8px;}
+    .keyword-tag{padding:5px 12px;border-radius:20px;font-size:13px;
+                 background:#EEEDFE;color:#5b4fcf;font-weight:500;}
+
+    /* Speaker bars */
+    .speaker-bars{display:flex;flex-direction:column;gap:10px;}
+    .speaker-row{display:flex;align-items:center;gap:10px;}
+    .speaker-name{font-size:12px;color:#555;min-width:90px;}
+    .speaker-track{flex:1;background:#f0f0ea;border-radius:4px;height:24px;overflow:hidden;}
+    .speaker-fill{height:100%;border-radius:4px;display:flex;align-items:center;
+                  padding-left:8px;transition:width 0.8s;}
+    .speaker-fill span{font-size:11px;color:#fff;font-weight:500;}
+    .speaker-pct{font-size:12px;color:#888;min-width:35px;}
+
+    /* Loading */
+    .loading{text-align:center;padding:40px;color:#888;font-size:14px;}
+    .empty{text-align:center;padding:30px;color:#aaa;font-size:13px;
+           font-style:italic;}
+
+    .refresh-btn{margin-left:auto;font-size:12px;color:#5b4fcf;cursor:pointer;
+                 background:none;border:1px solid #5b4fcf;padding:4px 12px;
+                 border-radius:8px;}
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">T</div>
+  <h1>Thunai</h1>
+  <span>Analytics Dashboard</span>
+  <a href="/" class="nav-link">Upload Audio</a>
+</div>
+
+<div class="main">
+
+  <!-- Summary stats -->
+  <div class="stats-row" id="statsRow">
+    <div class="loading">Loading analytics...</div>
+  </div>
+
+  <!-- Daily chart + Language donut -->
+  <div class="chart-grid">
+    <div class="chart-card">
+      <h3>Transcriptions — Last 30 Days</h3>
+      <div id="dailyChart"><div class="loading">Loading...</div></div>
+      <div class="daily-labels" id="dailyLabels"></div>
+    </div>
+    <div class="chart-card">
+      <h3>Language Breakdown</h3>
+      <div id="languageChart"><div class="loading">Loading...</div></div>
+    </div>
+  </div>
+
+  <!-- Speaker analysis -->
+  <div class="chart-full">
+    <h3>Speaker Talk Time</h3>
+    <div id="speakerChart"><div class="loading">Loading...</div></div>
+  </div>
+
+  <!-- Keywords -->
+  <div class="chart-full">
+    <h3>Top Keywords (what customers talk about most)</h3>
+    <div id="keywordsChart"><div class="loading">Loading...</div></div>
+  </div>
+
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+
+// Colors for charts
+const COLORS = [
+  '#5b4fcf','#0f6e56','#e07b39','#2563eb',
+  '#7c3aed','#dc2626','#059669','#d97706',
+];
+
+// ── Load all data on page load ──
+window.onload = async () => {
+  await Promise.all([
+    loadSummary(),
+    loadDaily(),
+    loadLanguages(),
+    loadSpeakers(),
+    loadKeywords(),
+  ]);
+};
+
+// ── Summary stats ──
+async function loadSummary() {
+  try {
+    const res = await fetch(`${API}/analytics/summary`);
+    const data = await res.json();
+
+    const stats = [
+      { icon: '🎙️', val: data.total_transcriptions, lbl: 'Total Transcriptions' },
+      { icon: '⏱️', val: data.total_audio_minutes + ' min', lbl: 'Total Audio Processed' },
+      { icon: '⚡', val: data.average_duration_seconds + 's', lbl: 'Avg Conversation Length' },
+      { icon: '👥', val: data.average_speakers, lbl: 'Avg Speakers per Call' },
+      { icon: '🚀', val: data.average_processing_time + 's', lbl: 'Avg Processing Time' },
+    ];
+
+    document.getElementById('statsRow').innerHTML = stats.map(s => `
+      <div class="stat-card">
+        <div class="stat-icon">${s.icon}</div>
+        <div class="stat-val">${s.val}</div>
+        <div class="stat-lbl">${s.lbl}</div>
+      </div>
+    `).join('');
+  } catch(e) {
+    document.getElementById('statsRow').innerHTML =
+      '<div class="loading">Could not load summary. Is the server running?</div>';
+  }
+}
+
+// ── Daily bar chart ──
+async function loadDaily() {
+  try {
+    const res = await fetch(`${API}/analytics/daily?days=30`);
+    const data = await res.json();
+    const daily = data.daily || [];
+
+    if (daily.every(d => d.count === 0)) {
+      document.getElementById('dailyChart').innerHTML =
+        '<div class="empty">No transcriptions yet. Upload some audio files first.</div>';
+      return;
+    }
+
+    const maxCount = Math.max(...daily.map(d => d.count), 1);
+
+    // Show last 15 days for readability
+    const recent = daily.slice(-15);
+
+    document.getElementById('dailyChart').innerHTML = `
+      <div class="daily-chart">
+        ${recent.map(d => `
+          <div class="daily-bar" style="height:${Math.max((d.count/maxCount)*100, 2)}%">
+            <div class="tooltip">${d.date}<br>${d.count} transcription${d.count!==1?'s':''}<br>${d.total_minutes} min</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+
+    document.getElementById('dailyLabels').innerHTML = recent.map(d => `
+      <div class="daily-lbl">${d.date.slice(5)}</div>
+    `).join('');
+
+  } catch(e) {
+    document.getElementById('dailyChart').innerHTML =
+      '<div class="empty">Could not load daily data.</div>';
+  }
+}
+
+// ── Language donut chart ──
+async function loadLanguages() {
+  try {
+    const res = await fetch(`${API}/analytics/languages`);
+    const data = await res.json();
+    const langs = data.languages || [];
+
+    if (langs.length === 0) {
+      document.getElementById('languageChart').innerHTML =
+        '<div class="empty">No language data yet.</div>';
+      return;
+    }
+
+    // Build horizontal bar chart for languages
+    const max = langs[0]?.count || 1;
+
+    document.getElementById('languageChart').innerHTML = `
+      <div class="bar-chart">
+        ${langs.map((l, i) => `
+          <div class="bar-row">
+            <div class="bar-label">${l.language_name}</div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width:${(l.count/max)*100}%;background:${COLORS[i%COLORS.length]}">
+                <span>${l.percentage}%</span>
+              </div>
+            </div>
+            <div class="bar-count">${l.count}</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } catch(e) {
+    document.getElementById('languageChart').innerHTML =
+      '<div class="empty">Could not load language data.</div>';
+  }
+}
+
+// ── Speaker talk time ──
+async function loadSpeakers() {
+  try {
+    const res = await fetch(`${API}/analytics/speakers`);
+    const data = await res.json();
+    const stats = data.speaker_stats || [];
+
+    if (stats.length === 0) {
+      document.getElementById('speakerChart').innerHTML =
+        '<div class="empty">No speaker data yet.</div>';
+      return;
+    }
+
+    document.getElementById('speakerChart').innerHTML = `
+      <div class="speaker-bars">
+        ${stats.map((s, i) => `
+          <div class="speaker-row">
+            <div class="speaker-name">${s.speaker_label}</div>
+            <div class="speaker-track">
+              <div class="speaker-fill"
+                   style="width:${s.percentage}%;background:${COLORS[i%COLORS.length]}">
+                <span>${s.total_minutes} min</span>
+              </div>
+            </div>
+            <div class="speaker-pct">${s.percentage}%</div>
+          </div>
+        `).join('')}
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:#999;">
+        Based on ${stats.reduce((a,s)=>a+s.total_segments,0)} total speaker segments
+      </div>
+    `;
+  } catch(e) {
+    document.getElementById('speakerChart').innerHTML =
+      '<div class="empty">Could not load speaker data.</div>';
+  }
+}
+
+// ── Keywords word cloud ──
+async function loadKeywords() {
+  try {
+    const res = await fetch(`${API}/analytics/keywords?top=25`);
+    const data = await res.json();
+    const keywords = data.keywords || [];
+
+    if (keywords.length === 0) {
+      document.getElementById('keywordsChart').innerHTML =
+        '<div class="empty">No keywords yet. Upload audio files to see what customers talk about most.</div>';
+      return;
+    }
+
+    const maxCount = keywords[0]?.count || 1;
+
+    document.getElementById('keywordsChart').innerHTML = `
+      <div class="keyword-cloud">
+        ${keywords.map((k, i) => {
+          const size = 11 + Math.round((k.count / maxCount) * 10);
+          return `<div class="keyword-tag" style="font-size:${size}px;opacity:${0.5 + (k.count/maxCount)*0.5}"
+                       title="${k.count} occurrences">${k.word}</div>`;
+        }).join('')}
+      </div>
+      <div style="margin-top:14px;font-size:12px;color:#999;">
+        Hover over a keyword to see how many times it appears
+      </div>
+    `;
+  } catch(e) {
+    document.getElementById('keywordsChart').innerHTML =
+      '<div class="empty">Could not load keywords.</div>';
+  }
+}
+</script>
+</body>
+</html>
