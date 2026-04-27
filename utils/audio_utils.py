@@ -23,6 +23,14 @@ SUPPORTED_MIME_TYPES = {
     "video/quicktime",
 }
 
+# Hard cap: 500 MB — supports up to ~30 min WAV / ~3 hr MP3
+# Your settings.max_audio_size_bytes overrides this if it is larger.
+# If your .env still has the old 25 MB value, this fallback kicks in.
+_FALLBACK_MAX_BYTES = 500 * 1024 * 1024   # 500 MB
+
+# Sarvam requires at least 0.1 s of audio — we pad anything shorter.
+MIN_SEGMENT_SAMPLES_AT_16K = 1600   # 0.1 s × 16000 Hz
+
 
 def validate_audio_file(content_type: str, file_size: int) -> None:
     if content_type not in SUPPORTED_MIME_TYPES:
@@ -30,39 +38,43 @@ def validate_audio_file(content_type: str, file_size: int) -> None:
             f"Unsupported format: '{content_type}'. "
             f"Supported: {', '.join(sorted(SUPPORTED_MIME_TYPES))}"
         )
-    if file_size > settings.max_audio_size_bytes:
-        max_mb = settings.max_audio_size_bytes / (1024 * 1024)
+
+    # Use whichever limit is larger so a stale .env never blocks 30-min files.
+    effective_max = max(
+        getattr(settings, "max_audio_size_bytes", 0),
+        _FALLBACK_MAX_BYTES,
+    )
+    if file_size > effective_max:
+        max_mb = effective_max / (1024 * 1024)
         actual_mb = file_size / (1024 * 1024)
-        raise ValueError(f"File too large: {actual_mb:.1f} MB. Max: {max_mb:.0f} MB.")
+        raise ValueError(
+            f"File too large: {actual_mb:.1f} MB. Max allowed: {max_mb:.0f} MB."
+        )
 
 
 def convert_to_mono_wav(audio_bytes: bytes) -> tuple[np.ndarray, int]:
     """
-    Convert any audio format to mono 16kHz WAV using ffmpeg directly.
-    This bypasses librosa and speechbrain completely — much more reliable.
+    Convert any audio format to mono 16 kHz WAV using ffmpeg.
+    Handles M4A, MP3, OGG, FLAC, WEBM — everything.
     """
     logger.debug("Converting audio using ffmpeg...")
 
-    # Write input bytes to a temp file
     with tempfile.NamedTemporaryFile(suffix=".input_audio", delete=False) as tmp_in:
         tmp_in.write(audio_bytes)
         tmp_in_path = tmp_in.name
 
-    # Output will be a temp WAV file
     tmp_out_path = tmp_in_path + "_converted.wav"
 
     try:
-        # Use ffmpeg directly to convert to 16kHz mono WAV
-        # This handles M4A, MP3, OGG, FLAC, WEBM — everything
         result = subprocess.run(
             [
                 "ffmpeg",
-                "-y",               # overwrite output if exists
-                "-i", tmp_in_path,  # input file
-                "-ar", "16000",     # sample rate 16000 Hz
-                "-ac", "1",         # mono (1 channel)
-                "-f", "wav",        # output format WAV
-                tmp_out_path,       # output file
+                "-y",
+                "-i", tmp_in_path,
+                "-ar", "16000",
+                "-ac", "1",
+                "-f", "wav",
+                tmp_out_path,
             ],
             capture_output=True,
             text=True,
@@ -70,12 +82,12 @@ def convert_to_mono_wav(audio_bytes: bytes) -> tuple[np.ndarray, int]:
 
         if result.returncode != 0:
             logger.error("ffmpeg error: %s", result.stderr)
-            raise ValueError(f"ffmpeg failed to convert audio: {result.stderr[-200:]}")
+            raise ValueError(
+                f"ffmpeg failed to convert audio: {result.stderr[-200:]}"
+            )
 
-        # Read the converted WAV file with soundfile
         audio_array, sample_rate = sf.read(tmp_out_path, dtype="float32")
 
-        # If somehow still stereo, mix down to mono
         if len(audio_array.shape) > 1:
             audio_array = audio_array.mean(axis=1)
 
@@ -87,7 +99,6 @@ def convert_to_mono_wav(audio_bytes: bytes) -> tuple[np.ndarray, int]:
         return audio_array, sample_rate
 
     finally:
-        # Always clean up temp files
         if os.path.exists(tmp_in_path):
             os.unlink(tmp_in_path)
         if os.path.exists(tmp_out_path):
@@ -100,9 +111,30 @@ def slice_audio_segment(
     start_seconds: float,
     end_seconds: float,
 ) -> bytes:
+    """
+    Slice a segment from the full audio array and return WAV bytes.
+
+    FIX: Sarvam rejects audio shorter than ~0.1 s with a 400 error.
+    We pad anything below MIN_SEGMENT_SAMPLES_AT_16K with silence so
+    the API never sees an illegally short clip. This prevents the
+    cascade of '[transcription failed]' you saw after the 2-minute mark.
+    """
     start_sample = max(0, int(start_seconds * sample_rate))
     end_sample = min(len(audio_array), int(end_seconds * sample_rate))
     segment = audio_array[start_sample:end_sample]
+
+    # ── Pad if the slice is too short for Sarvam ─────────────────────
+    min_samples = max(
+        MIN_SEGMENT_SAMPLES_AT_16K,
+        int(0.1 * sample_rate),   # 100 ms regardless of sample rate
+    )
+    if len(segment) < min_samples:
+        padding = np.zeros(min_samples - len(segment), dtype=np.float32)
+        segment = np.concatenate([segment, padding])
+        logger.debug(
+            "Padded short segment [%.3fs–%.3fs] to %.3fs",
+            start_seconds, end_seconds, min_samples / sample_rate,
+        )
 
     buffer = io.BytesIO()
     sf.write(buffer, segment, sample_rate, format="WAV", subtype="PCM_16")

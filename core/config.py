@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     huggingface_token: str
 
     # Audio limits
-    max_audio_size_bytes: int = 100 * 1024 * 1024   # 100 MB
+    max_audio_size_bytes: int = 500 * 1024 * 1024   # 500 MB
     target_sample_rate: int = 16000
 
     # App info
